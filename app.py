@@ -1036,12 +1036,11 @@ elif page == "🔎 Khám phá phim":
         "🔎 Khám phá phim"
     )
 
+
     col1, col2 = st.columns([2, 1])
 
-    with col1:
-    
+    # Hàm gợi ý tên phim khi người dùng nhập chữ
     def suggest_movies(searchterm: str):
-
         query = searchterm.strip().casefold()
 
         if not query:
@@ -1064,6 +1063,7 @@ elif page == "🔎 Khám phá phim":
 
         return matches[:15]
 
+    # Ô tìm kiếm có gợi ý tự động
     with col1:
         keyword = st_searchbox(
             search_function=suggest_movies,
@@ -1073,21 +1073,9 @@ elif page == "🔎 Khám phá phim":
             default_use_searchterm=True,
             clear_on_submit=False,
             edit_after_submit="option",
-            debounce=200,
-            style_overrides={
-                "searchbox": {
-                    "singleValue": {
-                        "color": "#FFFFFF"
-                    },
-                    "option": {
-                        "color": "#FFFFFF",
-                        "backgroundColor": "#18243A"
-                    },
-                    "menuList": {
-                        "backgroundColor": "#18243A"
-                    }
-                }
-            }
+            debounce=200
+        ) or ""
+
         ) or ""
 
 
