@@ -1076,8 +1076,6 @@ elif page == "🔎 Khám phá phim":
             debounce=200
         ) or ""
 
-        ) or ""
-
 
     with col2:
 
