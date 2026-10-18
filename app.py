@@ -188,6 +188,26 @@ div.stButton > button[kind="primary"] {
 [data-testid="stCaptionContainer"] {
     color: #FFFFFF !important;
 }
+
+[data-testid="stCaptionContainer"],
+[data-testid="stCaptionContainer"] *,
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] span,
+[data-testid="stSidebar"] small,
+[data-testid="stMetricLabel"] *,
+[data-testid="stMetricValue"] * {
+    color: #FFFFFF !important;
+    opacity: 1 !important;
+}
+
+[data-testid="stDataFrame"] {
+    color: #FFFFFF !important;
+}
+
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] label * {
+    color: #FFFFFF !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
