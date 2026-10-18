@@ -1,0 +1,4 @@
+﻿Algorithm,Unique Movies,Total Movies,Coverage@10
+Content-Based,679,1628,0.41707616707616707
+Collaborative Filtering,66,1628,0.04054054054054054
+Hybrid,204,1628,0.12530712530712532
