@@ -23,11 +23,14 @@ st.set_page_config(
 )
 
 
+
+# Đường dẫn khi triển khai lên GitHub và Streamlit Cloud
 ROOT = Path(__file__).resolve().parent
 
-MODEL_DIR = ROOT / "models"
-DATA_DIR = ROOT / "data" / "processed"
-RESULT_DIR = ROOT / "results"
+MODEL_DIR = ROOT
+DATA_DIR = ROOT
+RESULT_DIR = ROOT
+
 
 # API key được lưu riêng, không ghi trực tiếp vào code.
 try:
