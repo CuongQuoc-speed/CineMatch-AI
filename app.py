@@ -142,6 +142,55 @@ div.stButton > button[kind="primary"] {
     opacity: 0.82;
     margin-top: 20px;
 }
+
+/* Nội dung và tiêu đề */
+.stApp,
+.stApp h1,
+.stApp h2,
+.stApp h3,
+.stApp h4,
+.stApp p,
+.stApp span,
+.stApp label,
+.stApp strong,
+.stApp small {
+    color: #FFFFFF !important;
+}
+
+/* Thanh menu bên trái */
+[data-testid="stSidebar"],
+[data-testid="stSidebar"] * {
+    color: #FFFFFF !important;
+}
+
+/* Các ô thống kê */
+[data-testid="stMetricLabel"],
+[data-testid="stMetricValue"] {
+    color: #FFFFFF !important;
+}
+
+/* Nút bấm */
+.stButton button,
+.stButton button * {
+    color: #FFFFFF !important;
+}
+
+/* Ô nhập liệu */
+.stTextInput input,
+.stNumberInput input {
+    color: #FFFFFF !important;
+    background-color: #18243A !important;
+}
+
+/* Chữ trong danh sách lựa chọn */
+[data-baseweb="select"] {
+    color: #FFFFFF !important;
+}
+
+/* Chú thích */
+[data-testid="stCaptionContainer"] {
+    color: #FFFFFF !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
