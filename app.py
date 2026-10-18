@@ -1065,15 +1065,61 @@ elif page == "🔎 Khám phá phim":
 
     # Ô tìm kiếm có gợi ý tự động
     with col1:
+        
         keyword = st_searchbox(
             search_function=suggest_movies,
-            label="Tìm theo tên phim",
-            placeholder="Nhập chữ để gợi ý phim...",
+            label="🔎 Tìm kiếm phim yêu thích",
+            placeholder="Nhập tên phim, ví dụ: Toy Story, Star Wars...",
             key="cinematch_search",
             default_use_searchterm=True,
             clear_on_submit=False,
             edit_after_submit="option",
-            debounce=200
+            debounce=200,
+            style_overrides={
+                "searchbox": {
+                    "control": {
+                        "backgroundColor": "#17233B",
+                        "border": "1px solid #667EEA",
+                        "borderRadius": "14px",
+                        "minHeight": "54px",
+                        "paddingLeft": "10px",
+                        "paddingRight": "8px",
+                        "boxShadow": "0 4px 16px rgba(79, 70, 229, 0.16)"
+                    },
+                    "input": {
+                        "color": "#FFFFFF",
+                        "fontSize": "16px"
+                    },
+                    "placeholder": {
+                        "color": "#A8B7D4",
+                        "fontSize": "15px"
+                    },
+                    "singleValue": {
+                        "color": "#FFFFFF",
+                        "fontSize": "16px"
+                    },
+                    "menuList": {
+                        "backgroundColor": "#111B30",
+                        "borderRadius": "10px",
+                        "padding": "5px"
+                    },
+                    "option": {
+                        "color": "#FFFFFF",
+                        "backgroundColor": "#1A2945",
+                        "fontSize": "15px",
+                        "padding": "12px 14px",
+                        "cursor": "pointer",
+                        "&:hover": {
+                            "backgroundColor": "#344778"
+                        }
+                    }
+                },
+                "dropdown": {
+                    "fill": "#A5B4FC",
+                    "width": 20,
+                    "height": 20
+                }
+            }
         ) or ""
 
 
