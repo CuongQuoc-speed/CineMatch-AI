@@ -22,7 +22,9 @@ st.set_page_config(
     layout="wide"
 )
 
-ROOT = Path(__file__).resolve().parent.parent
+
+ROOT = Path(__file__).resolve().parent
+
 MODEL_DIR = ROOT / "models"
 DATA_DIR = ROOT / "data" / "processed"
 RESULT_DIR = ROOT / "results"
