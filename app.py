@@ -1068,7 +1068,7 @@ elif page == "🔎 Khám phá phim":
         
         keyword = st_searchbox(
             search_function=suggest_movies,
-            label="🔎 Tìm kiếm phim yêu thích",
+            label="Tìm kiếm phim yêu thích",
             placeholder="Nhập tên phim, ví dụ: Toy Story, Star Wars...",
             key="cinematch_search",
             default_use_searchterm=True,
