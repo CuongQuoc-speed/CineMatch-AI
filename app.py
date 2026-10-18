@@ -9,6 +9,7 @@ import pandas as pd
 import plotly.express as px
 import requests
 import streamlit as st
+from streamlit_searchbox import st_searchbox
 from sklearn.metrics.pairwise import cosine_similarity
 
 
@@ -1038,11 +1039,57 @@ elif page == "🔎 Khám phá phim":
     col1, col2 = st.columns([2, 1])
 
     with col1:
+    
+    def suggest_movies(searchterm: str):
 
-        keyword = st.text_input(
-            "Tìm theo tên phim",
-            placeholder="Ví dụ: Toy Story, Star Wars..."
+        query = searchterm.strip().casefold()
+
+        if not query:
+            return []
+
+        titles = catalog["title"].dropna().astype(str)
+
+        matches = [
+            title
+            for title in titles.unique()
+            if query in title.casefold()
+        ]
+
+        matches.sort(
+            key=lambda title: (
+                not title.casefold().startswith(query),
+                title.casefold()
+            )
         )
+
+        return matches[:15]
+
+    with col1:
+        keyword = st_searchbox(
+            search_function=suggest_movies,
+            label="Tìm theo tên phim",
+            placeholder="Nhập chữ để gợi ý phim...",
+            key="cinematch_search",
+            default_use_searchterm=True,
+            clear_on_submit=False,
+            edit_after_submit="option",
+            debounce=200,
+            style_overrides={
+                "searchbox": {
+                    "singleValue": {
+                        "color": "#FFFFFF"
+                    },
+                    "option": {
+                        "color": "#FFFFFF",
+                        "backgroundColor": "#18243A"
+                    },
+                    "menuList": {
+                        "backgroundColor": "#18243A"
+                    }
+                }
+            }
+        ) or ""
+
 
     with col2:
 
