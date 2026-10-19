@@ -1,3 +1,4 @@
+
 import os
 import re
 from difflib import SequenceMatcher
@@ -9,28 +10,50 @@ import pandas as pd
 import plotly.express as px
 import requests
 import streamlit as st
-from streamlit_searchbox import st_searchbox
 from sklearn.metrics.pairwise import cosine_similarity
 
+try:
+    from streamlit_searchbox import st_searchbox
+except ImportError:
+    st_searchbox = None
 
-# ==========================================
+
+# ======================================================
 # 1. CẤU HÌNH WEBSITE
-# ==========================================
+# ======================================================
 
 st.set_page_config(
-    page_title="CineMatch AI | Gợi ý phim thông minh",
+    page_title="CineMatch AI",
     page_icon="🎬",
     layout="wide"
 )
 
+HERE = Path(__file__).resolve().parent
 
-ROOT = Path(__file__).resolve().parent
+ROOT = (
+    HERE.parent
+    if (HERE.parent / "models").is_dir()
+    else HERE
+)
 
-MODEL_DIR = ROOT
-DATA_DIR = ROOT
-RESULT_DIR = ROOT
+MODEL_DIR = (
+    ROOT / "models"
+    if (ROOT / "models").is_dir()
+    else ROOT
+)
 
-# API key được lưu riêng, không ghi trực tiếp vào code.
+DATA_DIR = (
+    ROOT / "data" / "processed"
+    if (ROOT / "data" / "processed").is_dir()
+    else ROOT
+)
+
+RESULT_DIR = (
+    ROOT / "results"
+    if (ROOT / "results").is_dir()
+    else ROOT
+)
+
 try:
     TMDB_API_KEY = str(
         st.secrets.get("TMDB_API_KEY", "")
@@ -41,184 +64,150 @@ except Exception:
     ).strip()
 
 
-# ==========================================
-# 2. GIAO DIỆN CSS
-# ==========================================
+# ======================================================
+# 2. GIAO DIỆN CINEMATCH AI
+# ======================================================
 
 st.markdown("""
 <style>
+
 .stApp {
     background:
         radial-gradient(
             ellipse at 80% 0%,
-            #1b2850,
-            transparent 45%
+            #1b2c57 0%,
+            transparent 47%
         ),
-        #090f1d;
+        #0a1120;
+
+    color: white;
 }
 
 [data-testid="stSidebar"] {
-    background: #101a2d;
-    border-right: 1px solid #273450;
+    background: #111b30;
+    border-right: 1px solid #30405f;
 }
 
 .block-container {
-    max-width: 1450px;
+    max-width: 1500px;
     padding-top: 1.7rem;
 }
 
+.stApp h1,
+.stApp h2,
+.stApp h3,
+.stApp p,
+.stApp label,
+[data-testid="stMetricValue"],
+[data-testid="stMetricLabel"],
+[data-testid="stCaptionContainer"] {
+    color: #f1f5ff !important;
+}
+
 .hero {
+    padding: 32px;
+    border-radius: 20px;
+
     background: linear-gradient(
-        115deg,
-        #193c82,
-        #5437a5,
-        #172956
+        110deg,
+        #204889,
+        #5e3ca7
     );
-    border: 1px solid #4d5592;
-    border-radius: 22px;
-    padding: 40px 34px;
+
+    border: 1px solid #6373b0;
     margin-bottom: 22px;
 }
 
 .hero h1 {
-    color: white;
-    font-size: clamp(2rem, 4vw, 3.2rem);
-    margin: 0 0 12px;
+    margin: 0 0 10px;
+    color: white !important;
 }
 
 .hero p {
-    color: #e2e8ff;
-    font-size: 1.05rem;
-    max-width: 760px;
-    line-height: 1.65;
+    color: #e6eaff !important;
+    margin: 0;
+    font-size: 16px;
 }
 
 [data-testid="stMetric"] {
-    background: #18243a;
-    border: 1px solid #2f415e;
-    padding: 18px;
+    background: #192744;
+    border: 1px solid #394d75;
     border-radius: 16px;
+    padding: 16px;
 }
 
-.poster-fallback {
-    height: 260px;
-    border-radius: 12px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    background: linear-gradient(
-        155deg,
-        #243758,
-        #101827
-    );
-    color: #aab9dc;
-    margin: 6px 0 12px;
-    font-size: 3.5rem;
-}
-
-.poster-fallback small {
-    font-size: 0.9rem;
-    margin-top: 8px;
-}
-
-div.stButton > button[kind="primary"] {
+.stButton button[kind="primary"] {
     background: linear-gradient(
         110deg,
-        #4167f2,
-        #8452dd
+        #496be6,
+        #8251d6
+    ) !important;
+
+    border: 0 !important;
+    color: white !important;
+}
+
+.stTextInput input {
+    background: #182743 !important;
+    color: #ffffff !important;
+}
+
+.poster-empty {
+    aspect-ratio: 2 / 3;
+    border-radius: 12px;
+
+    background: linear-gradient(
+        135deg,
+        #293d67,
+        #111b31
     );
-    border: 0;
-    border-radius: 10px;
-    color: white;
-    font-weight: 700;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+
+    font-size: 42px;
 }
 
-.footer-note {
-    text-align: center;
-    font-size: 0.82rem;
-    opacity: 0.82;
-    margin-top: 20px;
+.poster-empty small {
+    font-size: 13px;
+    color: #c9d6f6;
 }
 
-/* Nội dung và tiêu đề */
-.stApp,
-.stApp h1,
-.stApp h2,
-.stApp h3,
-.stApp h4,
-.stApp p,
-.stApp span,
-.stApp label,
-.stApp strong,
-.stApp small {
-    color: #FFFFFF !important;
+.db-heading {
+    padding: 23px 27px;
+    border-radius: 17px;
+
+    background: linear-gradient(
+        110deg,
+        #1d4287,
+        #5539a0
+    );
+
+    margin-bottom: 18px;
 }
 
-/* Thanh menu bên trái */
-[data-testid="stSidebar"],
-[data-testid="stSidebar"] * {
-    color: #FFFFFF !important;
+.db-heading h2 {
+    margin: 0 0 6px;
+    color: #ffffff !important;
 }
 
-/* Các ô thống kê */
-[data-testid="stMetricLabel"],
-[data-testid="stMetricValue"] {
-    color: #FFFFFF !important;
+.db-heading p {
+    margin: 0;
+    color: #e5ecff !important;
 }
 
-/* Nút bấm */
-.stButton button,
-.stButton button * {
-    color: #FFFFFF !important;
-}
-
-/* Ô nhập liệu */
-.stTextInput input,
-.stNumberInput input {
-    color: #FFFFFF !important;
-    background-color: #18243A !important;
-}
-
-/* Chữ trong danh sách lựa chọn */
-[data-baseweb="select"] {
-    color: #FFFFFF !important;
-}
-
-/* Chú thích */
-[data-testid="stCaptionContainer"] {
-    color: #FFFFFF !important;
-}
-
-[data-testid="stCaptionContainer"],
-[data-testid="stCaptionContainer"] *,
-[data-testid="stSidebar"] p,
-[data-testid="stSidebar"] span,
-[data-testid="stSidebar"] small,
-[data-testid="stMetricLabel"] *,
-[data-testid="stMetricValue"] * {
-    color: #FFFFFF !important;
-    opacity: 1 !important;
-}
-
-[data-testid="stDataFrame"] {
-    color: #FFFFFF !important;
-}
-
-[data-testid="stSidebar"] label,
-[data-testid="stSidebar"] label * {
-    color: #FFFFFF !important;
-}
 </style>
 """, unsafe_allow_html=True)
 
 
-# ==========================================
-# 3. TẢI MÔ HÌNH VÀ DỮ LIỆU
-# ==========================================
+# ======================================================
+# 3. TẢI MÔ HÌNH
+# ======================================================
 
 @st.cache_resource(
-    show_spinner="Đang tải mô hình khuyến nghị..."
+    show_spinner="Đang tải mô hình..."
 )
 def load_models():
 
@@ -238,28 +227,31 @@ def load_models():
         DATA_DIR / "train.csv"
     )
 
-    movie_ids = np.asarray(
+    ids = np.asarray(
         hybrid["candidate_movie_ids"],
         dtype=int
     )
 
     info = cb["movie_info"].copy()
-    info["movie_id"] = info["movie_id"].astype(int)
+
+    info["movie_id"] = (
+        info["movie_id"].astype(int)
+    )
 
     catalog = (
         info.set_index("movie_id")
-        .loc[movie_ids]
+        .loc[ids]
         .reset_index()
     )
 
-    cb_idx = catalog[
+    cb_indices = catalog[
         "matrix_index"
     ].to_numpy(dtype=int)
 
-    cf_idx = np.asarray(
+    cf_indices = np.asarray(
         [
-            cf["movie_to_index"][int(mid)]
-            for mid in movie_ids
+            cf["movie_to_index"][int(m)]
+            for m in ids
         ],
         dtype=int
     )
@@ -269,30 +261,29 @@ def load_models():
         cf,
         hybrid,
         train,
-        movie_ids,
+        ids,
         catalog,
-        cb["tfidf_matrix"][cb_idx].tocsr(),
-        cf["item_factors"][cf_idx],
-        cf["item_bias"][cf_idx]
+        cb["tfidf_matrix"][cb_indices].tocsr(),
+        cf["item_factors"][cf_indices],
+        cf["item_bias"][cf_indices]
     )
 
 
 @st.cache_data(show_spinner=False)
 def load_results():
 
-    names = {
+    files = {
         "topk": "final_test_comparison.csv",
         "rating": "final_test_rating_metrics.csv",
         "coverage": "final_test_coverage.csv"
     }
 
     return {
-        key: (
-            pd.read_csv(RESULT_DIR / filename)
-            if (RESULT_DIR / filename).exists()
-            else pd.DataFrame()
-        )
-        for key, filename in names.items()
+        key: pd.read_csv(RESULT_DIR / filename)
+        if (RESULT_DIR / filename).is_file()
+        else pd.DataFrame()
+
+        for key, filename in files.items()
     }
 
 
@@ -312,23 +303,20 @@ try:
 
     results = load_results()
 
-except Exception as exc:
+except Exception as error:
 
     st.error(
-        "Không thể tải mô hình hoặc dữ liệu. "
-        "Kiểm tra thư mục models và data/processed."
+        "Không thể tải mô hình hoặc CSV. "
+        "Hãy kiểm tra cấu trúc thư mục dự án."
     )
 
-    st.exception(exc)
+    st.exception(error)
     st.stop()
 
 
-alpha = float(hybrid["alpha"])
-
-if TMDB_API_KEY:
-    st.sidebar.success("✅ Đã đọc được TMDb API key")
-else:
-    st.sidebar.error("❌ Chưa đọc được TMDb API key")
+ALPHA = float(
+    hybrid["alpha"]
+)
 
 weighted_ratings = (
     pd.to_numeric(
@@ -357,9 +345,9 @@ cb_positions = {
 }
 
 
-# ==========================================
-# 4. CHUYỂN THỂ LOẠI SANG TIẾNG VIỆT
-# ==========================================
+# ======================================================
+# 4. THỂ LOẠI PHIM TIẾNG VIỆT
+# ======================================================
 
 GENRE_VI = {
     "unknown": "Chưa xác định",
@@ -384,20 +372,25 @@ GENRE_VI = {
 }
 
 
-def genres_vi(raw):
-
-    tokens = str(raw).split()
+def translate_genre(value):
 
     return ", ".join(
-        GENRE_VI.get(token, token)
-        for token in tokens
+        GENRE_VI.get(x, x)
+        for x in str(value).split()
     ) or "Chưa rõ thể loại"
+
+
+def title_key(value):
+
+    return " ".join(
+        str(value).casefold().split()
+    )
 
 
 catalog["thể_loại"] = (
     catalog["genre_text"]
     .fillna("")
-    .map(genres_vi)
+    .map(translate_genre)
 )
 
 catalog["năm"] = pd.to_numeric(
@@ -408,11 +401,11 @@ catalog["năm"] = pd.to_numeric(
 )
 
 
-# ==========================================
-# 5. TÌM POSTER PHIM TRÊN TMDB
-# ==========================================
+# ======================================================
+# 5. POSTER PHIM TMDB
+# ======================================================
 
-def split_title_year(title):
+def parse_movie_name(title):
 
     title = str(title).strip()
 
@@ -433,7 +426,6 @@ def split_title_year(title):
         else title
     )
 
-    # MovieLens có những tên như "Godfather, The".
     for article in ("The", "A", "An"):
 
         if name.endswith(", " + article):
@@ -450,106 +442,108 @@ def split_title_year(title):
 
 
 @st.cache_data(
-    ttl=24 * 60 * 60,
+    ttl=86400,
     show_spinner=False
 )
-def poster_url(title, api_key):
+def get_poster_url(title, api_key):
 
     if not api_key:
         return None
 
-    name, year = split_title_year(title)
+    name, year = parse_movie_name(title)
 
-    base_params = {
+    params = {
         "api_key": api_key,
         "query": name,
         "include_adult": "false",
         "language": "en-US"
     }
 
-    queries = (
-        [dict(base_params, year=year), base_params]
+    attempts = (
+        [dict(params, year=year), params]
         if year
-        else [base_params]
+        else [params]
     )
-
-    candidates = []
 
     try:
 
-        for params in queries:
+        movies = []
+
+        for query in attempts:
 
             response = requests.get(
                 "https://api.themoviedb.org/3/search/movie",
-                params=params,
-                timeout=(3, 6)
+                params=query,
+                timeout=(3, 7)
             )
 
             response.raise_for_status()
 
-            candidates = [
-                item
-                for item in response.json().get(
+            movies = [
+                x
+                for x in response.json().get(
                     "results", []
                 )
-                if item.get("poster_path")
+                if x.get("poster_path")
             ]
 
-            if candidates:
+            if movies:
                 break
 
-    except requests.RequestException:
+    except (
+        requests.RequestException,
+        ValueError
+    ):
         return None
 
-    if not candidates:
+    if not movies:
         return None
 
-    # Ưu tiên tên phim khớp và đúng năm.
-    def match_score(item):
-
-        options = [
-            str(item.get("title", "")),
-            str(item.get("original_title", ""))
-        ]
+    def match_score(movie):
 
         similarity = max(
             SequenceMatcher(
                 None,
                 name.casefold(),
-                candidate.casefold()
+                str(
+                    movie.get(k, "")
+                ).casefold()
             ).ratio()
-            for candidate in options
+
+            for k in (
+                "title",
+                "original_title"
+            )
         )
 
-        release_year = str(
-            item.get("release_date", "")
-        )[:4]
-
-        year_bonus = (
+        bonus = (
             0.2
-            if year and release_year == str(year)
+            if year and str(
+                movie.get("release_date", "")
+            )[:4] == str(year)
             else 0
         )
 
-        return similarity + year_bonus
+        return similarity + bonus
 
     best = max(
-        candidates,
+        movies,
         key=match_score
     )
 
-    if match_score(best) < 0.48:
-        return None
+    if match_score(best) >= 0.55:
 
-    return (
-        "https://image.tmdb.org/t/p/w342"
-        + best["poster_path"]
-    )
+        return (
+            "https://image.tmdb.org/t/p/w342"
+            + best["poster_path"]
+        )
+
+    return None
 
 
-def render_poster(title):
+def show_poster(title):
 
-    url = poster_url(
+    url = get_poster_url(
         title,
         TMDB_API_KEY
     )
@@ -558,14 +552,14 @@ def render_poster(title):
 
         st.image(
             url,
-            use_container_width=True
+            width="stretch"
         )
 
     else:
 
         st.markdown(
             """
-            <div class="poster-fallback">
+            <div class="poster-empty">
                 🎬
                 <small>Chưa có poster</small>
             </div>
@@ -574,18 +568,21 @@ def render_poster(title):
         )
 
 
-# ==========================================
+# ======================================================
 # 6. CONTENT-BASED FILTERING
-# ==========================================
+# ======================================================
 
-def cb_scores_for_user(user_id):
+def content_scores(user_id):
 
     profile = cb["user_profiles"].get(
         int(user_id)
     )
 
     if profile is None:
-        return np.zeros(len(movie_ids))
+
+        return np.zeros(
+            len(movie_ids)
+        )
 
     profile = np.asarray(
         profile,
@@ -593,48 +590,52 @@ def cb_scores_for_user(user_id):
     ).reshape(1, -1)
 
     if np.linalg.norm(profile) < 1e-12:
-        return np.zeros(len(movie_ids))
 
-    sim = cosine_similarity(
+        return np.zeros(
+            len(movie_ids)
+        )
+
+    similarity = cosine_similarity(
         profile,
         cb_matrix
     ).ravel()
 
     return (
-        np.clip(sim, -1, 1) + 1
+        np.clip(similarity, -1, 1) + 1
     ) / 2
 
 
-# ==========================================
+# ======================================================
 # 7. COLLABORATIVE FILTERING SVD
-# ==========================================
+# ======================================================
 
-def cf_scores_for_user(user_id):
+def collaborative_scores(user_id):
 
-    scores = np.asarray(
+    prediction = np.asarray(
         cf["global_mean"] + cf_bias,
         dtype=float
     ).copy()
 
-    user_idx = cf["user_to_index"].get(
-        int(user_id)
-    )
+    user_idx = cf[
+        "user_to_index"
+    ].get(int(user_id))
 
     if user_idx is not None:
 
-        scores += (
+        prediction += (
             cf["user_bias"][user_idx]
-            + cf_factors @ cf["user_factors"][user_idx]
+            + cf_factors
+            @ cf["user_factors"][user_idx]
         )
 
     return (
-        np.clip(scores, 1, 5) - 1
+        np.clip(prediction, 1, 5) - 1
     ) / 4
 
 
-# ==========================================
-# 8. XẾP HẠNG PHIM
-# ==========================================
+# ======================================================
+# 8. XẾP HẠNG PHIM – LOẠI PHIM TRÙNG
+# ======================================================
 
 def rank_movies(
     scores,
@@ -648,7 +649,10 @@ def rank_movies(
     )
 
     excluded = (
-        set(int(x) for x in excluded_ids)
+        {
+            int(m)
+            for m in excluded_ids
+        }
         if excluded_ids is not None
         else set()
     )
@@ -660,18 +664,37 @@ def rank_movies(
         )
     )
 
-    ordering = np.lexsort((
+    order = np.lexsort((
         movie_ids[valid],
         -weighted_ratings[valid],
         -scores[valid]
     ))
 
-    picked = valid[
-        ordering[:top_n]
-    ]
+    selected = []
+    used_names = set()
+
+    for i in valid[order]:
+
+        name = title_key(
+            catalog.iloc[i]["title"]
+        )
+
+        if name in used_names:
+            continue
+
+        used_names.add(name)
+        selected.append(i)
+
+        if len(selected) == top_n:
+            break
+
+    chosen = np.asarray(
+        selected,
+        dtype=int
+    )
 
     output = (
-        catalog.iloc[picked]
+        catalog.iloc[chosen]
         .copy()
         .reset_index(drop=True)
     )
@@ -679,33 +702,39 @@ def rank_movies(
     output.insert(
         0,
         "Hạng",
-        np.arange(1, len(output) + 1)
+        np.arange(
+            1,
+            len(output) + 1
+        )
     )
 
-    output["score"] = scores[picked]
+    output["score"] = scores[chosen]
 
-    return output, picked
+    return output, chosen
 
 
-def recommend_existing(
+# ======================================================
+# 9. GỢI Ý CHO NGƯỜI DÙNG MOVIELENS
+# ======================================================
+
+def recommend_known_user(
     user_id,
     algorithm,
     top_n
 ):
 
-    cb_s = cb_scores_for_user(user_id)
+    cb_s = content_scores(user_id)
+    cf_s = collaborative_scores(user_id)
 
-    cf_s = cf_scores_for_user(user_id)
-
-    hybrid_s = (
-        alpha * cb_s
-        + (1 - alpha) * cf_s
+    hy_s = (
+        ALPHA * cb_s
+        + (1 - ALPHA) * cf_s
     )
 
-    scores = {
+    ranking = {
+        "Hybrid": hy_s,
         "Content-Based": cb_s,
-        "Collaborative Filtering": cf_s,
-        "Hybrid": hybrid_s
+        "Collaborative Filtering": cf_s
     }[algorithm]
 
     seen = cb["seen_by_user"].get(
@@ -713,26 +742,29 @@ def recommend_existing(
         set()
     )
 
-    recs, positions = rank_movies(
-        scores,
+    output, idx = rank_movies(
+        ranking,
         excluded_ids=seen,
         top_n=top_n
     )
 
-    recs["content_score"] = cb_s[positions]
+    output["content_score"] = cb_s[idx]
 
-    recs["collaborative_score"] = cf_s[positions]
+    output["collaborative_score"] = cf_s[idx]
 
-    recs["hybrid_score"] = hybrid_s[positions]
+    output["hybrid_score"] = hy_s[idx]
 
-    return recs
+    return output
 
 
-# ==========================================
-# 9. GỢI Ý CHO NGƯỜI DÙNG MỚI
-# ==========================================
+# ======================================================
+# 10. GỢI Ý CHO NGƯỜI DÙNG MỚI
+# ======================================================
 
-def recommend_new(ratings, top_n):
+def recommend_new_user(
+    ratings,
+    top_n
+):
 
     indices = []
     weights = []
@@ -751,11 +783,16 @@ def recommend_new(ratings, top_n):
 
     if indices:
 
-        matrix = cb["tfidf_matrix"][indices]
+        matrix = cb[
+            "tfidf_matrix"
+        ][indices]
 
         profile = np.asarray(
             matrix.multiply(
-                np.asarray(weights)[:, None]
+                np.asarray(
+                    weights,
+                    dtype=float
+                )[:, None]
             ).sum(axis=0)
         ).ravel()
 
@@ -788,89 +825,143 @@ def recommend_new(ratings, top_n):
             np.clip(sim, -1, 1) + 1
         ) / 2
 
-    recs, _ = rank_movies(
+    output, _ = rank_movies(
         scores,
         excluded_ids=ratings.keys(),
         top_n=top_n
     )
 
-    return recs, fallback
+    return output, fallback
 
 
-# ==========================================
-# 10. HIỂN THỊ THẺ PHIM KÈM POSTER
-# ==========================================
+# ======================================================
+# 11. THẺ PHIM – 5 PHIM MỖI HÀNG
+# ======================================================
 
-def show_movie_cards(
+def movie_cards(
     frame,
-    label="Điểm gợi ý",
-    ncols=2
+    show_score=True,
+    score_label="Điểm phù hợp",
+    n_cols=5
 ):
 
     if frame.empty:
 
         st.info(
-            "Không tìm thấy phim phù hợp."
+            "Không có phim phù hợp."
         )
+
         return
 
-    cols = st.columns(ncols)
+    if show_score:
 
-    for i, (_, movie) in enumerate(
-        frame.iterrows()
+        if score_label == "Độ tương đồng thể loại":
+
+            st.caption(
+                "ℹ️ Độ giống nhau của vector TF-IDF "
+                "thể loại. Điểm 1.000 không có nghĩa "
+                "cốt truyện giống hệt nhau."
+            )
+
+        else:
+
+            st.caption(
+                "ℹ️ Điểm xếp hạng chuẩn hóa 0–1, "
+                "không phải xác suất người dùng "
+                "thích phim."
+            )
+
+    # Tạo từng hàng riêng biệt
+    for start in range(
+        0,
+        len(frame),
+        n_cols
     ):
 
-        with cols[i % ncols]:
+        columns = st.columns(n_cols)
 
-            with st.container(border=True):
+        batch = frame.iloc[
+            start:start + n_cols
+        ]
 
-                render_poster(
-                    movie["title"]
-                )
+        for col, (_, movie) in zip(
+            columns,
+            batch.iterrows()
+        ):
 
-                st.markdown(
-                    f"**{movie['title']}**"
-                )
+            with col:
 
-                st.caption(
-                    movie["thể_loại"]
-                )
+                with st.container(border=True):
 
-                score = float(movie["score"])
+                    show_poster(
+                        movie["title"]
+                    )
 
-                st.write(
-                    f"**{label}: {score:.3f}**"
-                )
+                    st.markdown(
+                        f"**{movie['title']}**"
+                    )
 
-                st.progress(
-                    float(np.clip(score, 0, 1))
-                )
+                    st.caption(
+                        movie["thể_loại"]
+                    )
 
-                if "hybrid_score" in frame.columns:
+                    if show_score:
 
-                    with st.expander(
-                        "Xem điểm từng thuật toán"
-                    ):
-
-                        st.write(
-                            f"Content-Based: "
-                            f"{movie['content_score']:.4f}"
+                        score = float(
+                            movie["score"]
                         )
 
-                        st.write(
-                            f"Collaborative SVD: "
-                            f"{movie['collaborative_score']:.4f}"
+                        st.markdown(
+                            f"**{score_label}: "
+                            f"{score:.3f} / 1.000**"
                         )
 
-                        st.write(
-                            f"Hybrid: "
-                            f"{movie['hybrid_score']:.4f}"
+                        st.progress(
+                            float(
+                                np.clip(
+                                    score,
+                                    0,
+                                    1
+                                )
+                            )
                         )
 
+                    else:
 
-# ==========================================
-# 11. THANH ĐIỀU HƯỚNG
-# ==========================================
+                        st.markdown(
+                            f"⭐ **{float(movie['weighted_rating']):.2f}/5**"
+                        )
+
+                        st.caption(
+                            f"{int(movie['rating_count'])} "
+                            "lượt đánh giá"
+                        )
+
+                    if "hybrid_score" in frame.columns:
+
+                        with st.expander(
+                            "Điểm từng thuật toán"
+                        ):
+
+                            st.write(
+                                f"Content-Based: "
+                                f"{float(movie['content_score']):.4f}"
+                            )
+
+                            st.write(
+                                f"Collaborative SVD: "
+                                f"{float(movie['collaborative_score']):.4f}"
+                            )
+
+                            st.write(
+                                f"Hybrid: "
+                                f"{float(movie['hybrid_score']):.4f}"
+                            )
+
+
+# ======================================================
+# 12. THANH ĐIỀU HƯỚNG
+# ======================================================
 
 st.sidebar.title(
     "🎬 CINEMATCH AI"
@@ -892,143 +983,125 @@ page = st.sidebar.radio(
 
 st.sidebar.divider()
 
-st.sidebar.markdown(
-    "**🧠 Content-Based:** TF-IDF"
+st.sidebar.write(
+    "🧠 Content-Based: TF-IDF"
 )
 
-st.sidebar.markdown(
-    "**🤝 Collaborative:** SVD"
+st.sidebar.write(
+    "🤝 Collaborative: SVD"
 )
 
 st.sidebar.metric(
     "Trọng số Hybrid (α)",
-    f"{alpha:.2f}"
+    f"{ALPHA:.2f}"
 )
 
 st.sidebar.caption(
     "Dữ liệu: MovieLens 100K"
 )
 
-if not TMDB_API_KEY:
 
-    st.sidebar.info(
-        "Chưa cài TMDb API key. "
-        "Website vẫn hoạt động nhưng "
-        "sẽ hiện poster dự phòng."
-    )
-
-
-# ==========================================
-# 12. TRANG CHỦ
-# ==========================================
+# ======================================================
+# 13. TRANG CHỦ
+# ======================================================
 
 if page == "🏠 Trang chủ":
 
     st.markdown(
         """
-        <section class="hero">
+        <div class="hero">
             <h1>🎬 CineMatch AI</h1>
             <p>
-                Khám phá điện ảnh theo sở thích
-                với hệ thống khuyến nghị phim lai,
+                Hệ thống khuyến nghị phim
                 kết hợp Content-Based Filtering
                 và Collaborative Filtering (SVD).
             </p>
-        </section>
+        </div>
         """,
         unsafe_allow_html=True
     )
 
-    m1, m2, m3, m4 = st.columns(4)
+    a, b, c, d = st.columns(4)
 
-    m1.metric(
-        "🎥 Tổng số phim",
+    a.metric(
+        "🎞️ Tổng số phim",
         f"{len(cb['movie_info']):,}"
     )
 
-    m2.metric(
+    b.metric(
         "👥 Người dùng",
         f"{len(cb['user_profiles']):,}"
     )
 
-    m3.metric(
-        "⭐ Lượt đánh giá Train",
+    c.metric(
+        "⭐ Đánh giá Train",
         f"{len(train):,}"
     )
 
-    m4.metric(
+    d.metric(
         "🧠 Hybrid Alpha",
-        f"{alpha:.2f}"
+        f"{ALPHA:.2f}"
     )
 
     st.subheader(
         "🔥 Những bộ phim nổi bật"
     )
 
-    popular = catalog.sort_values(
-        ["weighted_rating", "rating_count"],
-        ascending=False
-    ).head(8)
-
-    cols = st.columns(4)
-
-    for i, (_, movie) in enumerate(
-        popular.iterrows()
-    ):
-
-        with cols[i % 4]:
-
-            with st.container(border=True):
-
-                render_poster(
-                    movie["title"]
-                )
-
-                st.markdown(
-                    f"**{movie['title']}**"
-                )
-
-                st.caption(
-                    movie["thể_loại"]
-                )
-
-                st.write(
-                    f"⭐ **{float(movie['weighted_rating']):.2f}/5**"
-                )
-
-                st.caption(
-                    f"{int(movie['rating_count'])} lượt đánh giá"
-                )
-
-    st.subheader(
-        "📈 Phân bố lượt đánh giá"
+    popular = (
+        catalog.sort_values(
+            ["weighted_rating", "rating_count"],
+            ascending=False
+        )
+        .drop_duplicates(
+            subset="title"
+        )
+        .head(8)
     )
 
-    hist = (
+    movie_cards(
+        popular,
+        show_score=False,
+        n_cols=4
+    )
+
+    st.subheader(
+        "📈 Phân bố điểm đánh giá"
+    )
+
+    histogram = (
         train["rating"]
         .value_counts()
         .sort_index()
         .rename_axis("Số sao")
-        .reset_index(name="Số lượt đánh giá")
+        .reset_index(
+            name="Lượt đánh giá"
+        )
     )
 
     fig = px.bar(
-        hist,
+        histogram,
         x="Số sao",
-        y="Số lượt đánh giá",
-        template="plotly_dark",
-        title="Phân bố điểm đánh giá trong tập Train"
+        y="Lượt đánh giá",
+        color="Lượt đánh giá",
+        color_continuous_scale="Purples",
+        template="plotly_dark"
+    )
+
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        coloraxis_showscale=False
     )
 
     st.plotly_chart(
         fig,
-        use_container_width=True
+        width="stretch"
     )
 
 
-# ==========================================
-# 13. TRANG KHÁM PHÁ PHIM
-# ==========================================
+# ======================================================
+# 14. KHÁM PHÁ PHIM
+# ======================================================
 
 elif page == "🔎 Khám phá phim":
 
@@ -1036,98 +1109,118 @@ elif page == "🔎 Khám phá phim":
         "🔎 Khám phá phim"
     )
 
+    st.caption(
+        "Tìm kiếm tên phim, lọc thể loại, "
+        "năm phát hành và tìm 10 phim tương tự."
+    )
 
-    col1, col2 = st.columns([2, 1])
+    titles = (
+        catalog["title"]
+        .dropna()
+        .astype(str)
+        .drop_duplicates()
+        .tolist()
+    )
 
-    # Hàm gợi ý tên phim khi người dùng nhập chữ
-    def suggest_movies(searchterm: str):
-        query = searchterm.strip().casefold()
+    def suggest_movies(searchterm):
 
-        if not query:
+        q = str(
+            searchterm
+        ).strip().casefold()
+
+        if not q:
             return []
 
-        titles = catalog["title"].dropna().astype(str)
-
-        matches = [
-            title
-            for title in titles.unique()
-            if query in title.casefold()
+        found = [
+            t
+            for t in titles
+            if q in t.casefold()
         ]
 
-        matches.sort(
-            key=lambda title: (
-                not title.casefold().startswith(query),
-                title.casefold()
+        found.sort(
+            key=lambda t: (
+                not t.casefold().startswith(q),
+                t.casefold()
             )
         )
 
-        return matches[:15]
+        return found[:15]
 
-    # Ô tìm kiếm có gợi ý tự động
-    with col1:
-        
-        keyword = st_searchbox(
-            search_function=suggest_movies,
-            label="Tìm kiếm phim yêu thích",
-            placeholder="Nhập tên phim, ví dụ: Toy Story, Star Wars...",
-            key="cinematch_search",
-            default_use_searchterm=True,
-            clear_on_submit=False,
-            edit_after_submit="option",
-            debounce=200,
-            style_overrides={
-                "searchbox": {
-                    "control": {
-                        "backgroundColor": "#17233B",
-                        "border": "1px solid #667EEA",
-                        "borderRadius": "14px",
-                        "minHeight": "54px",
-                        "paddingLeft": "10px",
-                        "paddingRight": "8px",
-                        "boxShadow": "0 4px 16px rgba(79, 70, 229, 0.16)"
-                    },
-                    "input": {
-                        "color": "#FFFFFF",
-                        "fontSize": "16px"
-                    },
-                    "placeholder": {
-                        "color": "#A8B7D4",
-                        "fontSize": "15px"
-                    },
-                    "singleValue": {
-                        "color": "#FFFFFF",
-                        "fontSize": "16px"
-                    },
-                    "menuList": {
-                        "backgroundColor": "#111B30",
-                        "borderRadius": "10px",
-                        "padding": "5px"
-                    },
-                    "option": {
-                        "color": "#FFFFFF",
-                        "backgroundColor": "#1A2945",
-                        "fontSize": "15px",
-                        "padding": "12px 14px",
-                        "cursor": "pointer",
-                        "&:hover": {
-                            "backgroundColor": "#344778"
+    c1, c2 = st.columns([2, 1])
+
+    with c1:
+
+        if st_searchbox:
+
+            keyword = st_searchbox(
+                suggest_movies,
+                label="🔍 Tìm theo tên phim",
+                placeholder="Toy Story, Star Wars...",
+                key="movie_search",
+                default_use_searchterm=True,
+                clear_on_submit=False,
+                edit_after_submit="option",
+                debounce=250,
+                style_overrides={
+                    "searchbox": {
+                        "control": {
+                            "backgroundColor": "#192942",
+                            "border": "1px solid #798bf2",
+                            "borderRadius": "12px"
+                        },
+                        "input": {
+                            "color": "#ffffff"
+                        },
+                        "singleValue": {
+                            "color": "#ffffff"
+                        },
+                        "placeholder": {
+                            "color": "#c2cde9"
+                        },
+                        "menuList": {
+                            "backgroundColor": "#142039"
+                        },
+                        "option": {
+                            "color": "#ffffff",
+                            "backgroundColor": "#1b2a49"
                         }
                     }
-                },
-                "dropdown": {
-                    "fill": "#A5B4FC",
-                    "width": 20,
-                    "height": 20
                 }
-            }
-        ) or ""
+            ) or ""
 
+        else:
 
-    with col2:
+            keyword = st.text_input(
+                "🔍 Tìm theo tên phim",
+                placeholder="Nhập tên phim..."
+            )
 
-        selected_genre = st.selectbox(
-            "Lọc theo thể loại",
-            ["Tất cả"] + list(GENRE_VI.values())
+    with c2:
+
+        genre = st.selectbox(
+            "🎭 Thể loại",
+            ["Tất cả"] + list(
+                GENRE_VI.values()
+            )
+        )
+
+    years = catalog["năm"].dropna()
+
+    year_range = None
+
+    if (
+        not years.empty
+        and int(years.min()) < int(years.max())
+    ):
+
+        year_range = st.slider(
+            "🗓️ Năm phát hành",
+            int(years.min()),
+            int(years.max()),
+            (
+                int(years.min()),
+                int(years.max())
+            )
         )
 
     filtered = catalog.copy()
@@ -1143,12 +1236,12 @@ elif page == "🔎 Khám phá phim":
             )
         ]
 
-    if selected_genre != "Tất cả":
+    if genre != "Tất cả":
 
         genre_key = next(
-            key
-            for key, value in GENRE_VI.items()
-            if value == selected_genre
+            k
+            for k, v in GENRE_VI.items()
+            if v == genre
         )
 
         filtered = filtered[
@@ -1156,35 +1249,29 @@ elif page == "🔎 Khám phá phim":
             .fillna("")
             .str.split()
             .map(
-                lambda values: genre_key in values
+                lambda tokens: genre_key in tokens
             )
         ]
 
-    valid_years = filtered["năm"].dropna()
+    if year_range is not None:
 
-    if not valid_years.empty:
-
-        low = int(valid_years.min())
-        high = int(valid_years.max())
-
-        if low < high:
-
-            yr = st.slider(
-                "Khoảng năm phát hành",
-                low,
-                high,
-                (low, high)
+        filtered = filtered[
+            filtered["năm"].between(
+                *year_range
             )
+        ]
 
-            filtered = filtered[
-                filtered["năm"].between(*yr)
-            ]
-
-    st.write(
-        f"**Tìm thấy {len(filtered)} phim**"
+    filtered = (
+        filtered.drop_duplicates(
+            subset="title"
+        ).copy()
     )
 
-    shown = filtered[
+    st.markdown(
+        f"**Tìm thấy {len(filtered):,} phim**"
+    )
+
+    table = filtered[
         [
             "title",
             "thể_loại",
@@ -1192,80 +1279,106 @@ elif page == "🔎 Khám phá phim":
             "rating_count",
             "weighted_rating"
         ]
-    ].rename(columns={
-        "title": "Tên phim",
-        "thể_loại": "Thể loại",
-        "năm": "Năm",
-        "rating_count": "Số đánh giá",
-        "weighted_rating": "Điểm xếp hạng"
-    })
+    ].rename(
+        columns={
+            "title": "Tên phim",
+            "thể_loại": "Thể loại",
+            "năm": "Năm",
+            "rating_count": "Số đánh giá",
+            "weighted_rating": "Điểm xếp hạng"
+        }
+    )
 
     st.dataframe(
-        shown.round(2),
+        table.round(2),
         hide_index=True,
-        use_container_width=True
+        width="stretch",
+        height=min(
+            365,
+            max(
+                75,
+                (len(table) + 1) * 35 + 8
+            )
+        )
     )
 
     st.divider()
 
     st.subheader(
-        "🎯 Tìm phim tương tự"
+        "🎯 Tìm 10 phim tương tự"
     )
 
-    if not filtered.empty:
+    if filtered.empty:
 
-        selected_id = st.selectbox(
-            "Chọn phim",
-            filtered["movie_id"]
-            .astype(int)
-            .tolist(),
-            format_func=lambda mid: movie_titles.get(
-                mid,
-                str(mid)
-            )
+        st.info(
+            "Không tìm thấy phim phù hợp. "
+            "Hãy thay đổi bộ lọc."
         )
-
-        if st.button(
-            "Tìm 10 phim tương tự",
-            type="primary"
-        ):
-
-            matrix_i = movie_positions[
-                int(selected_id)
-            ]
-
-            sims = cosine_similarity(
-                cb_matrix[matrix_i],
-                cb_matrix
-            ).ravel()
-
-            output, _ = rank_movies(
-                sims,
-                excluded_ids=[selected_id],
-                top_n=10
-            )
-
-            show_movie_cards(
-                output,
-                label="Độ tương đồng"
-            )
 
     else:
 
-        st.info(
-            "Không có phim phù hợp "
-            "với điều kiện tìm kiếm."
+        chosen_id = st.selectbox(
+            "Chọn bộ phim",
+            filtered["movie_id"]
+            .astype(int)
+            .tolist(),
+            format_func=lambda mid:
+                movie_titles.get(
+                    int(mid),
+                    str(mid)
+                )
         )
 
+        if st.button(
+            "✨ Tìm phim tương tự",
+            type="primary"
+        ):
 
-# ==========================================
-# 14. TRANG GỢI Ý PHIM
-# ==========================================
+            position = movie_positions[
+                int(chosen_id)
+            ]
+
+            similarity = cosine_similarity(
+                cb_matrix[position],
+                cb_matrix
+            ).ravel()
+
+            chosen_title = title_key(
+                movie_titles[int(chosen_id)]
+            )
+
+            excluded = [
+                int(mid)
+                for mid, title in movie_titles.items()
+                if title_key(title) == chosen_title
+            ]
+
+            similar, _ = rank_movies(
+                similarity,
+                excluded_ids=excluded,
+                top_n=10
+            )
+
+            movie_cards(
+                similar,
+                score_label="Độ tương đồng thể loại",
+                n_cols=5
+            )
+
+
+# ======================================================
+# 15. GỢI Ý PHIM
+# ======================================================
 
 elif page == "✨ Gợi ý phim":
 
     st.title(
         "✨ Gợi ý phim dành cho bạn"
+    )
+
+    st.caption(
+        "Khuyến nghị cá nhân hóa "
+        "theo TF-IDF, SVD và Hybrid."
     )
 
     mode = st.radio(
@@ -1279,100 +1392,104 @@ elif page == "✨ Gợi ý phim":
 
     top_n = st.slider(
         "Số phim đề xuất",
-        min_value=5,
-        max_value=20,
-        value=10
+        5,
+        20,
+        10
     )
-
-    # --------------------------------------
-    # NGƯỜI DÙNG ĐÃ CÓ TRONG MOVIELENS
-    # --------------------------------------
 
     if mode == "Người dùng MovieLens":
 
         users = sorted(
             set(
-                int(x)
-                for x in cb["user_profiles"]
+                map(
+                    int,
+                    cb["user_profiles"]
+                )
             )
             &
             set(
-                int(x)
-                for x in cf["user_to_index"]
+                map(
+                    int,
+                    cf["user_to_index"]
+                )
             )
         )
 
         if not users:
 
-            st.warning(
-                "Không tìm thấy người dùng "
-                "có sẵn trong cả hai mô hình."
+            st.error(
+                "Không có người dùng chung "
+                "giữa hai mô hình."
             )
 
             st.stop()
 
-        user_id = st.selectbox(
-            "Mã người dùng",
-            users,
-            index=(
-                users.index(196)
-                if 196 in users
-                else 0
+        c1, c2 = st.columns(2)
+
+        with c1:
+
+            user_id = st.selectbox(
+                "👤 Mã người dùng",
+                users,
+                index=(
+                    users.index(196)
+                    if 196 in users
+                    else 0
+                )
             )
-        )
 
-        methods = {
-            "Hybrid": "Hybrid – Kết hợp hai thuật toán",
-            "Content-Based": "Content-Based – Theo thể loại",
-            "Collaborative Filtering":
-                "Collaborative Filtering – SVD"
-        }
+        with c2:
 
-        method = st.selectbox(
-            "Thuật toán",
-            list(methods),
-            format_func=lambda x: methods[x]
-        )
+            algorithms = {
+                "Hybrid":
+                    "Hybrid – Kết hợp CB và SVD",
 
-        count = int(
-            (
-                train["user_id"] == user_id
-            ).sum()
-        )
+                "Content-Based":
+                    "Content-Based – Theo nội dung",
+
+                "Collaborative Filtering":
+                    "Collaborative Filtering – SVD"
+            }
+
+            algorithm = st.selectbox(
+                "🧠 Thuật toán",
+                list(algorithms),
+                format_func=lambda x:
+                    algorithms[x]
+            )
 
         st.info(
-            f"Người dùng {user_id} "
-            f"đã đánh giá {count} phim "
-            "trong tập Train."
+            f"Người dùng {user_id} có "
+            f"{int((train['user_id'] == user_id).sum())} "
+            "đánh giá trong tập Train."
         )
 
         if st.button(
-            "✨ Đề xuất phim ngay",
+            "🎬 Đề xuất phim ngay",
             type="primary"
         ):
 
-            recommendations = recommend_existing(
+            recs = recommend_known_user(
                 user_id,
-                method,
+                algorithm,
                 top_n
             )
 
             st.success(
-                f"Đã tìm được "
-                f"{len(recommendations)} phim "
-                f"cho User {user_id}."
+                f"Tìm được {len(recs)} phim gợi ý."
             )
 
-            show_movie_cards(
-                recommendations
+            movie_cards(
+                recs,
+                n_cols=5
             )
 
             with st.expander(
-                "Bảng kết quả chi tiết"
+                "📋 Điểm từng thuật toán dạng bảng"
             ):
 
                 st.dataframe(
-                    recommendations[
+                    recs[
                         [
                             "title",
                             "thể_loại",
@@ -1382,55 +1499,58 @@ elif page == "✨ Gợi ý phim":
                         ]
                     ].round(4),
                     hide_index=True,
-                    use_container_width=True
+                    width="stretch"
                 )
-
-    # --------------------------------------
-    # NGƯỜI DÙNG MỚI (COLD START)
-    # --------------------------------------
 
     else:
 
         st.info(
-            "Chọn từ 2 đến 5 phim đã xem "
-            "và đánh giá từ 1 đến 5 sao "
-            "để hệ thống hiểu sở thích."
+            "Chọn 2–5 phim đã xem, "
+            "rồi đánh giá mỗi phim từ 1 đến 5 sao."
+        )
+
+        ids = (
+            catalog.drop_duplicates(
+                subset="title"
+            )["movie_id"]
+            .astype(int)
+            .tolist()
         )
 
         chosen = st.multiselect(
-            "Chọn các phim đã xem",
-            options=movie_ids.tolist(),
-            format_func=lambda mid: movie_titles.get(
-                mid,
-                str(mid)
-            ),
+            "🎞️ Phim đã xem",
+            ids,
+            format_func=lambda mid:
+                movie_titles.get(
+                    int(mid),
+                    str(mid)
+                ),
             max_selections=5
         )
 
-        ratings = {}
-
-        for mid in chosen:
-
-            ratings[int(mid)] = st.slider(
+        ratings = {
+            int(mid): st.slider(
                 f"⭐ {movie_titles[int(mid)]}",
                 1,
                 5,
                 4,
-                key=f"rating_{mid}"
+                key=f"new_user_{mid}"
             )
+            for mid in chosen
+        }
 
         if len(ratings) < 2:
 
             st.caption(
-                "Vui lòng chọn ít nhất 2 phim."
+                "Hãy chọn ít nhất hai phim."
             )
 
         elif st.button(
-            "✨ Tìm phim hợp sở thích",
+            "✨ Phân tích sở thích và gợi ý",
             type="primary"
         ):
 
-            rec, fallback = recommend_new(
+            recs, fallback = recommend_new_user(
                 ratings,
                 top_n
             )
@@ -1438,243 +1558,858 @@ elif page == "✨ Gợi ý phim":
             if fallback:
 
                 st.warning(
-                    "Sở thích chưa đủ rõ. "
-                    "Hệ thống gợi ý theo "
-                    "mức độ nổi bật."
+                    "Hồ sơ chưa đủ rõ, "
+                    "đang sử dụng danh sách phim nổi bật."
                 )
 
             else:
 
                 st.success(
-                    "Đã phân tích sở thích "
-                    "và tạo danh sách đề xuất!"
+                    "Đã phân tích sở thích!"
                 )
 
-            show_movie_cards(rec)
+            movie_cards(
+                recs,
+                n_cols=5
+            )
 
         st.caption(
-            "Người dùng mới sử dụng Content-Based. "
-            "SVD chỉ cá nhân hóa cho người dùng "
-            "đã có dữ liệu huấn luyện."
+            "Người dùng mới được gợi ý "
+            "theo Content-Based do chưa có "
+            "lịch sử SVD."
         )
 
 
-# ==========================================
-# 15. DASHBOARD ĐÁNH GIÁ
-# ==========================================
+# ======================================================
+# 16. DASHBOARD – PHONG CÁCH C
+# ĐẸP + HỌC THUẬT + KHÔNG CHỒNG CHỮ
+# ======================================================
 
 elif page == "📊 Dashboard":
 
-    st.title(
-        "📊 Dashboard đánh giá hệ thống"
+    # --------------------------------------------------
+    # 16.1 BANNER DASHBOARD
+    # --------------------------------------------------
+
+    st.markdown(
+        """
+        <div class="db-heading">
+            <h2>📊 Dashboard – Đánh giá CineMatch AI</h2>
+            <p>
+                Phân tích kết quả thực nghiệm
+                trên MovieLens 100K
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True
     )
 
-    st.write(
-        "Kết quả thực nghiệm "
-        "trên tập Test MovieLens 100K."
+    st.caption(
+        f"Hybrid: α = {ALPHA:.2f} "
+        f"(Content-Based {ALPHA:.0%}, "
+        f"Collaborative {1 - ALPHA:.0%}). "
+        "Alpha chọn trên Validation; "
+        "Test dùng để đánh giá cuối."
     )
 
-    topk = results["topk"]
-    rating = results["rating"]
-    coverage = results["coverage"]
+    # --------------------------------------------------
+    # 16.2 MÀU BIỂU ĐỒ THỐNG NHẤT
+    # --------------------------------------------------
 
-    # --------------------------------------
-    # PRECISION, RECALL, NDCG
-    # --------------------------------------
+    ALGORITHM_COLORS = {
+        "Content-Based": "#60a5fa",
+        "Collaborative Filtering": "#2dd4bf",
+        "Collaborative SVD": "#2dd4bf",
+        "Global Mean Baseline": "#60a5fa",
+        "Hybrid": "#aa8cf5"
+    }
 
-    if topk.empty:
+    # --------------------------------------------------
+    # 16.3 HÀM BIỂU ĐỒ KHÔNG CHỒNG CHỮ
+    # --------------------------------------------------
 
-        st.warning(
-            "Không tìm thấy file "
-            "final_test_comparison.csv."
-        )
+    def style_chart(
+        fig,
+        height=420,
+        show_legend=True
+    ):
 
-    else:
+        # Không đặt tiêu đề Plotly bên trong biểu đồ.
+        # Tiêu đề đã được hiển thị bằng Streamlit.
 
-        hybrid_rows = topk[
-            topk["Algorithm"] == "Hybrid"
-        ]
+        fig.update_layout(
+            title=None,
 
-        if not hybrid_rows.empty:
-
-            row = hybrid_rows.iloc[0]
-
-            cols = st.columns(4)
-
-            metrics = [
-                "Precision@10",
-                "Recall@10",
-                "NDCG@10",
-                "Coverage@10"
-            ]
-
-            for col, metric in zip(
-                cols,
-                metrics
-            ):
-
-                col.metric(
-                    metric,
-                    f"{float(row[metric]):.4f}"
-                )
-
-        st.subheader(
-            "So sánh các thuật toán"
-        )
-
-        st.dataframe(
-            topk.round(4),
-            hide_index=True,
-            use_container_width=True
-        )
-
-        melted = topk.melt(
-            id_vars="Algorithm",
-            value_vars=[
-                "Precision@10",
-                "Recall@10",
-                "NDCG@10"
-            ],
-            var_name="Chỉ số",
-            value_name="Giá trị"
-        )
-
-        fig = px.bar(
-            melted,
-            x="Algorithm",
-            y="Giá trị",
-            color="Chỉ số",
-            barmode="group",
             template="plotly_dark",
-            title="Precision, Recall và NDCG"
+
+            height=height,
+
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+
+            font=dict(
+                color="#f7f8ff",
+                size=12
+            ),
+
+            # Tăng khoảng trống để tránh dính chữ
+            margin=dict(
+                l=38,
+                r=45,
+                t=95 if show_legend else 25,
+                b=65
+            ),
+
+            # Đưa chú thích màu lên riêng
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.03,
+                xanchor="left",
+                x=0,
+                title_text="",
+                font=dict(size=12),
+                bgcolor="rgba(0,0,0,0)"
+            ),
+
+            showlegend=show_legend
         )
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
-
-    # --------------------------------------
-    # RMSE VÀ MAE
-    # --------------------------------------
-
-    st.subheader(
-        "📉 RMSE và MAE"
-    )
-
-    if not rating.empty:
-
-        st.dataframe(
-            rating.round(4),
-            hide_index=True,
-            use_container_width=True
-        )
-
-        subset = rating[
-            rating["Subset"] == "All Test"
-        ]
-
-        if not subset.empty:
-
-            mel = subset.melt(
-                id_vars="Algorithm",
-                value_vars=["RMSE", "MAE"],
-                var_name="Chỉ số",
-                value_name="Sai số"
-            )
-
-            fig = px.bar(
-                mel,
-                x="Algorithm",
-                y="Sai số",
-                color="Chỉ số",
-                barmode="group",
-                template="plotly_dark",
-                title="So sánh RMSE và MAE"
-            )
-
-            st.plotly_chart(
-                fig,
-                use_container_width=True
-            )
-
-    else:
-
-        st.info(
-            "Chưa có dữ liệu "
-            "sai số dự đoán."
-        )
-
-    # --------------------------------------
-    # COVERAGE
-    # --------------------------------------
-
-    st.subheader(
-        "🎞️ Độ bao phủ phim"
-    )
-
-    if not coverage.empty:
-
-        st.dataframe(
-            coverage.round(4),
-            hide_index=True,
-            use_container_width=True
-        )
-
-        fig = px.bar(
-            coverage,
-            x="Algorithm",
-            y="Coverage@10",
-            template="plotly_dark",
-            title="Coverage@10"
+        fig.update_xaxes(
+            showgrid=False,
+            automargin=True
         )
 
         fig.update_yaxes(
-            range=[0, 1]
+            gridcolor="rgba(255,255,255,0.12)",
+            automargin=True,
+            zeroline=False
         )
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True
+        return fig
+
+    # --------------------------------------------------
+    # 16.4 ĐỌC KẾT QUẢ CSV
+    # --------------------------------------------------
+
+    topk = results["topk"].copy()
+
+    rating_df = results["rating"].copy()
+
+    coverage_df = results["coverage"].copy()
+
+    TOPK = [
+        "Precision@10",
+        "Recall@10",
+        "NDCG@10",
+        "Coverage@10"
+    ]
+
+    if (
+        not topk.empty
+        and "Algorithm" in topk.columns
+    ):
+
+        topk["Algorithm"] = (
+            topk["Algorithm"]
+            .astype(str)
+            .str.strip()
         )
+
+        for name in TOPK:
+
+            if name in topk.columns:
+
+                topk[name] = pd.to_numeric(
+                    topk[name],
+                    errors="coerce"
+                )
 
     else:
 
-        st.info(
-            "Chưa có dữ liệu Coverage."
-        )
+        topk = pd.DataFrame()
 
-    st.info(
-        f"Hệ số Hybrid α = {alpha:.2f}, "
-        "được chọn từ tập Validation. "
-        "Tập Test dùng để đánh giá cuối cùng."
+    # --------------------------------------------------
+    # 16.5 BỐN THẺ KPI HYBRID
+    # --------------------------------------------------
+
+    st.subheader(
+        "🎯 Kết quả Hybrid trên tập Test"
     )
 
+    hybrid_row = (
+        topk.loc[
+            topk["Algorithm"] == "Hybrid"
+        ]
+        if not topk.empty
+        else pd.DataFrame()
+    )
 
-# ==========================================
-# 16. CHÂN TRANG VÀ GHI NHẬN NGUỒN
-# ==========================================
+    METRIC_INFO = {
+        "Precision@10":
+            "Tỷ lệ phim liên quan trong 10 phim đề xuất.",
+
+        "Recall@10":
+            "Tỷ lệ phim liên quan được hệ thống tìm thấy.",
+
+        "NDCG@10":
+            "Chất lượng thứ tự xếp hạng Top 10.",
+
+        "Coverage@10":
+            "Độ bao phủ danh mục phim."
+    }
+
+    kpi_columns = st.columns(4)
+
+    for col, name in zip(
+        kpi_columns,
+        TOPK
+    ):
+
+        with col:
+
+            value = (
+                pd.to_numeric(
+                    hybrid_row.iloc[0].get(name),
+                    errors="coerce"
+                )
+                if not hybrid_row.empty
+                else np.nan
+            )
+
+            st.metric(
+                name,
+                f"{float(value):.4f}"
+                if pd.notna(value)
+                else "—"
+            )
+
+            st.caption(
+                METRIC_INFO[name]
+            )
+
+    if hybrid_row.empty:
+
+        st.warning(
+            "Không tìm thấy hàng Hybrid trong "
+            "final_test_comparison.csv."
+        )
+
+    # --------------------------------------------------
+    # 16.6 BA TAB PHÂN TÍCH
+    # --------------------------------------------------
+
+    tab_topk, tab_rating, tab_analysis = st.tabs([
+        "📈 So sánh Top-K",
+        "📉 RMSE · MAE · Coverage",
+        "📝 Phân tích & kết luận"
+    ])
+
+    # ==================================================
+    # TAB 1 – TOP-K
+    # ==================================================
+
+    with tab_topk:
+
+        st.subheader(
+            "So sánh Precision, Recall và NDCG"
+        )
+
+        metrics = [
+            m
+            for m in TOPK[:3]
+            if m in topk.columns
+        ]
+
+        if (
+            not topk.empty
+            and metrics
+        ):
+
+            long_df = topk[
+                ["Algorithm"] + metrics
+            ].melt(
+                id_vars="Algorithm",
+                var_name="Chỉ số",
+                value_name="Giá trị"
+            ).dropna(
+                subset=["Giá trị"]
+            )
+
+            if not long_df.empty:
+
+                fig = px.bar(
+                    long_df,
+
+                    x="Chỉ số",
+                    y="Giá trị",
+
+                    color="Algorithm",
+
+                    barmode="group",
+
+                    color_discrete_map=ALGORITHM_COLORS,
+
+                    labels={
+                        "Algorithm": "Thuật toán"
+                    }
+                )
+
+                # Hiển thị giá trị trên cột
+                fig.update_traces(
+                    texttemplate="%{y:.4f}",
+                    textposition="outside",
+                    cliponaxis=False
+                )
+
+                # Chừa khoảng trên đầu cột
+                fig.update_yaxes(
+                    range=[
+                        0,
+                        max(
+                            0.02,
+                            float(
+                                long_df["Giá trị"].max()
+                            ) * 1.30
+                        )
+                    ]
+                )
+
+                st.plotly_chart(
+                    style_chart(fig),
+                    width="stretch"
+                )
+
+            st.markdown(
+                "**Bảng kết quả kiểm thử**"
+            )
+
+            st.dataframe(
+                topk.round(4),
+                hide_index=True,
+                width="stretch"
+            )
+
+        else:
+
+            st.warning(
+                "Không đủ dữ liệu Top-K trong "
+                "final_test_comparison.csv."
+            )
+
+        with st.expander(
+            "📘 Giải thích các chỉ số Top-K"
+        ):
+
+            st.markdown(
+                """
+                **Precision@10**
+
+                Tỷ lệ phim liên quan
+                trong 10 phim đề xuất.
+
+                **Recall@10**
+
+                Tỷ lệ phim liên quan
+                được hệ thống tìm ra.
+
+                **NDCG@10**
+
+                Đánh giá chất lượng thứ tự
+                các phim được xếp hạng.
+
+                **Coverage@10**
+
+                Đánh giá độ bao phủ
+                danh mục phim được đề xuất.
+
+                Các chỉ số được tính trên
+                dữ liệu Test offline.
+                """
+            )
+
+    # ==================================================
+    # TAB 2 – RMSE, MAE, COVERAGE
+    # ==================================================
+
+    with tab_rating:
+
+        st.subheader(
+            "Sai số dự đoán rating"
+        )
+
+        required_columns = {
+            "Algorithm",
+            "RMSE",
+            "MAE"
+        }
+
+        if (
+            not rating_df.empty
+            and required_columns.issubset(
+                rating_df.columns
+            )
+        ):
+
+            rating_df["RMSE"] = pd.to_numeric(
+                rating_df["RMSE"],
+                errors="coerce"
+            )
+
+            rating_df["MAE"] = pd.to_numeric(
+                rating_df["MAE"],
+                errors="coerce"
+            )
+
+            chosen_rating = rating_df.copy()
+
+            if "Subset" in rating_df.columns:
+
+                subsets = (
+                    rating_df["Subset"]
+                    .dropna()
+                    .astype(str)
+                    .unique()
+                    .tolist()
+                )
+
+                if subsets:
+
+                    selected = st.selectbox(
+                        "Nhóm đánh giá rating",
+
+                        subsets,
+
+                        index=(
+                            subsets.index("All Test")
+                            if "All Test" in subsets
+                            else 0
+                        )
+                    )
+
+                    chosen_rating = rating_df[
+                        rating_df["Subset"].astype(str)
+                        == selected
+                    ]
+
+            rating_long = chosen_rating.melt(
+                id_vars="Algorithm",
+
+                value_vars=[
+                    "RMSE",
+                    "MAE"
+                ],
+
+                var_name="Chỉ số",
+                value_name="Sai số"
+            ).dropna(
+                subset=["Sai số"]
+            )
+
+            if not rating_long.empty:
+
+                fig = px.bar(
+                    rating_long,
+
+                    x="Chỉ số",
+                    y="Sai số",
+
+                    color="Algorithm",
+
+                    barmode="group",
+
+                    color_discrete_map=ALGORITHM_COLORS
+                )
+
+                fig.update_traces(
+                    texttemplate="%{y:.4f}",
+                    textposition="outside",
+                    cliponaxis=False
+                )
+
+                fig.update_yaxes(
+                    range=[
+                        0,
+                        max(
+                            0.1,
+                            float(
+                                rating_long["Sai số"].max()
+                            ) * 1.30
+                        )
+                    ]
+                )
+
+                st.plotly_chart(
+                    style_chart(fig),
+                    width="stretch"
+                )
+
+            else:
+
+                st.info(
+                    "Nhóm dữ liệu này không có "
+                    "giá trị RMSE/MAE."
+                )
+
+            with st.expander(
+                "📋 Bảng RMSE và MAE"
+            ):
+
+                st.dataframe(
+                    rating_df.round(4),
+                    hide_index=True,
+                    width="stretch"
+                )
+
+        else:
+
+            st.info(
+                "Thiếu dữ liệu hợp lệ trong "
+                "final_test_rating_metrics.csv."
+            )
+
+        # ----------------------------------------------
+        # COVERAGE
+        # ----------------------------------------------
+
+        st.subheader(
+            "Độ bao phủ danh mục phim"
+        )
+
+        if (
+            coverage_df.empty
+            or not {
+                "Algorithm",
+                "Coverage@10"
+            }.issubset(coverage_df.columns)
+        ):
+
+            coverage_df = (
+                topk[
+                    [
+                        "Algorithm",
+                        "Coverage@10"
+                    ]
+                ].copy()
+
+                if (
+                    not topk.empty
+                    and "Coverage@10" in topk.columns
+                )
+
+                else pd.DataFrame()
+            )
+
+        if not coverage_df.empty:
+
+            coverage_df["Coverage@10"] = (
+                pd.to_numeric(
+                    coverage_df["Coverage@10"],
+                    errors="coerce"
+                )
+            )
+
+            valid_cov = coverage_df.dropna(
+                subset=["Coverage@10"]
+            )
+
+            if not valid_cov.empty:
+
+                fig = px.bar(
+                    valid_cov,
+
+                    x="Coverage@10",
+                    y="Algorithm",
+
+                    orientation="h",
+
+                    color="Algorithm",
+
+                    color_discrete_map=ALGORITHM_COLORS
+                )
+
+                fig.update_traces(
+                    texttemplate="%{x:.4f}",
+                    textposition="outside",
+                    cliponaxis=False
+                )
+
+                fig.update_xaxes(
+                    range=[
+                        0,
+                        max(
+                            1.08,
+                            float(
+                                valid_cov[
+                                    "Coverage@10"
+                                ].max()
+                            ) * 1.2
+                        )
+                    ]
+                )
+
+                st.plotly_chart(
+                    style_chart(
+                        fig,
+                        height=320,
+                        show_legend=False
+                    ),
+                    width="stretch"
+                )
+
+                st.dataframe(
+                    coverage_df.round(4),
+                    hide_index=True,
+                    width="stretch"
+                )
+
+            else:
+
+                st.info(
+                    "Không có số liệu Coverage@10 "
+                    "hợp lệ."
+                )
+
+        else:
+
+            st.info(
+                "Thiếu final_test_coverage.csv "
+                "hoặc trường Coverage@10."
+            )
+
+        st.caption(
+            "RMSE và MAE càng thấp càng tốt. "
+            "Coverage@10 càng cao cho thấy phạm vi "
+            "phim được khuyến nghị càng rộng."
+        )
+
+    # ==================================================
+    # TAB 3 – PHÂN TÍCH VÀ KẾT LUẬN
+    # ==================================================
+
+    with tab_analysis:
+
+        st.subheader(
+            "Nhận xét tự động theo dữ liệu Test"
+        )
+
+        def best_algorithms(
+            frame,
+            metric,
+            higher_is_better=True
+        ):
+
+            if (
+                frame.empty
+                or not {
+                    "Algorithm",
+                    metric
+                }.issubset(frame.columns)
+            ):
+
+                return None
+
+            check = frame[
+                [
+                    "Algorithm",
+                    metric
+                ]
+            ].copy()
+
+            check[metric] = pd.to_numeric(
+                check[metric],
+                errors="coerce"
+            )
+
+            check = check.dropna(
+                subset=[metric]
+            )
+
+            if check.empty:
+                return None
+
+            best = (
+                check[metric].max()
+                if higher_is_better
+                else check[metric].min()
+            )
+
+            names = check.loc[
+                np.isclose(
+                    check[metric],
+                    best,
+                    atol=1e-9,
+                    rtol=0
+                ),
+                "Algorithm"
+            ].astype(str).drop_duplicates().tolist()
+
+            return (
+                ", ".join(names),
+                float(best)
+            )
+
+        found = False
+
+        # Các chỉ số Top-K
+        for metric in TOPK:
+
+            res = best_algorithms(
+                topk,
+                metric
+            )
+
+            if res:
+
+                st.markdown(
+                    f"- **{metric}:** "
+                    f"{res[0]} đạt giá trị "
+                    f"cao nhất (**{res[1]:.4f}**)."
+                )
+
+                found = True
+
+        # RMSE và MAE
+        if (
+            not rating_df.empty
+            and {
+                "Algorithm",
+                "RMSE",
+                "MAE"
+            }.issubset(rating_df.columns)
+        ):
+
+            if "Subset" in rating_df.columns:
+
+                rate_test = rating_df[
+                    rating_df["Subset"].astype(str)
+                    == "All Test"
+                ]
+
+            else:
+
+                rate_test = rating_df
+
+            for metric in [
+                "RMSE",
+                "MAE"
+            ]:
+
+                res = best_algorithms(
+                    rate_test,
+                    metric,
+                    higher_is_better=False
+                )
+
+                if res:
+
+                    st.markdown(
+                        f"- **{metric} (All Test):** "
+                        f"{res[0]} có sai số thấp nhất "
+                        f"(**{res[1]:.4f}**)."
+                    )
+
+                    found = True
+
+        if not found:
+
+            st.info(
+                "Chưa có đủ dữ liệu CSV "
+                "để tổng hợp kết quả."
+            )
+
+        # ----------------------------------------------
+        # NHẬN XÉT HYBRID
+        # ----------------------------------------------
+
+        best_ndcg = best_algorithms(
+            topk,
+            "NDCG@10"
+        )
+
+        if best_ndcg:
+
+            if "Hybrid" in best_ndcg[0].split(", "):
+
+                st.success(
+                    "Hybrid có NDCG@10 cao nhất "
+                    "hoặc đồng hạng. Vẫn cần đối chiếu "
+                    "Precision, Recall, Coverage "
+                    "và sai số rating."
+                )
+
+            else:
+
+                st.info(
+                    "Theo NDCG@10, Hybrid chưa đứng đầu. "
+                    "Báo cáo nên trình bày kết quả "
+                    "thực nghiệm khách quan."
+                )
+
+        # ----------------------------------------------
+        # CÔNG THỨC HYBRID
+        # ----------------------------------------------
+
+        st.subheader(
+            "⚖️ Công thức Hybrid"
+        )
+
+        st.latex(
+            r"S_{Hybrid}=\alpha S_{CB}+(1-\alpha)S_{CF}"
+        )
+
+        st.write(
+            f"Với α = **{ALPHA:.2f}**, "
+            "điểm Hybrid kết hợp "
+            f"**{ALPHA:.0%} Content-Based** "
+            f"và **{1 - ALPHA:.0%} "
+            "Collaborative SVD** "
+            "trên thang điểm đã chuẩn hóa."
+        )
+
+        st.caption(
+            "Alpha được chọn trên Validation, "
+            "không điều chỉnh dựa trên điểm Test."
+        )
+
+        # ----------------------------------------------
+        # HẠN CHẾ NGHIÊN CỨU
+        # ----------------------------------------------
+
+        st.subheader(
+            "📌 Hạn chế nghiên cứu"
+        )
+
+        st.info(
+            "Content-Based dựa chủ yếu trên thể loại; "
+            "SVD phụ thuộc lịch sử rating. "
+            "Độ tương đồng 1.000 chỉ thể hiện vector "
+            "đặc trưng cùng hướng. "
+            "Kết quả offline không đảm bảo hiệu quả "
+            "giống hệt với người dùng thực tế."
+        )
+
+
+# ======================================================
+# 17. CHÂN TRANG
+# ======================================================
 
 st.divider()
 
 with st.expander(
-    "ℹ️ Giới thiệu và nguồn dữ liệu poster"
+    "ℹ️ Giới thiệu và nguồn poster"
 ):
 
     st.write(
         "CineMatch AI sử dụng MovieLens 100K "
-        "để nghiên cứu hệ thống khuyến nghị phim. "
-        "Poster được tìm từ TMDB khi có API key "
-        "và kết nối Internet. Một số poster "
-        "có thể thiếu hoặc không chính xác "
-        "do sự khác biệt tên phim giữa "
-        "hai cơ sở dữ liệu."
+        "và hình ảnh phim từ TMDb. "
+        "Một số poster có thể không trùng khớp "
+        "hoàn toàn."
     )
 
     st.markdown(
         "Nguồn poster: "
-        "[The Movie Database (TMDB)]"
-        "(https://www.themoviedb.org/)."
+        "[TMDb](https://www.themoviedb.org/)."
     )
 
     st.caption(
@@ -1682,12 +2417,7 @@ with st.expander(
         "not endorsed or certified by TMDB."
     )
 
-st.markdown(
-    """
-    <div class="footer-note">
-        🎬 CineMatch AI • Đề tài 15
-        • Python · Machine Learning · Streamlit
-    </div>
-    """,
-    unsafe_allow_html=True
+st.caption(
+    "🎬 CineMatch AI · Đề tài 15 · "
+    "TF-IDF · SVD · Hybrid · Streamlit"
 )
